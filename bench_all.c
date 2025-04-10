@@ -3,11 +3,11 @@
 
 UBENCH_EX(pidgraph, get_root_pid_vec)
 {
-	pid_t pid_arr[MAX_PIDS] = { 0 };
+	unsigned short pid_arr[MAX_PIDS] = { 0 };
 
 	UBENCH_DO_BENCHMARK()
 	{
-		int idx = 0;
+		unsigned short idx = 0;
 		get_pidgraph();
 		_pg_get_descendants(1, pid_arr, &idx);
 		_pg_reset_pidgraph();

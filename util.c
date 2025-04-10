@@ -97,7 +97,8 @@ bool update_framedata_poll_usec(mangoapp_msg_v1 *buf,
 
 bool prefcore_ranking(prefcore_state *state)
 {
-	memset(state->prefcore_ranking, -1, sizeof(state->prefcore_ranking));
+	memset(state->prefcore_ranking, 255, sizeof(state->prefcore_ranking));
+	memset(state->cpu_ordering, 255, sizeof(state->cpu_ordering));
 
 	state->dir = opendir(POLICY_PATH);
 	if (!state->dir) {
@@ -127,6 +128,55 @@ bool prefcore_ranking(prefcore_state *state)
 		}
 	}
 	closedir(state->dir);
+	
+	// Create a temporary array to store CPU IDs and their rankings
+	struct {
+		unsigned short cpu_id;
+		unsigned char ranking;
+	} cpu_rankings[MAX_CPUS];
+	
+	// Initialize the array with CPU IDs and their rankings
+	int valid_cpus = 0;
+	for (int i = 0; i < MAX_CPUS; i++) {
+		if (state->prefcore_ranking[i] != 255) {
+			cpu_rankings[valid_cpus].cpu_id = i;
+			cpu_rankings[valid_cpus].ranking = state->prefcore_ranking[i];
+			valid_cpus++;
+		}
+	}
+	
+	// Sort the array by ranking (descending), then by CPU ID (ascending)
+	for (int i = 0; i < valid_cpus - 1; i++) {
+		for (int j = 0; j < valid_cpus - i - 1; j++) {
+			// First sort by ranking (descending)
+			if (cpu_rankings[j].ranking < cpu_rankings[j + 1].ranking) {
+				// Swap
+				unsigned short temp_id = cpu_rankings[j].cpu_id;
+				unsigned char temp_rank = cpu_rankings[j].ranking;
+				cpu_rankings[j].cpu_id = cpu_rankings[j + 1].cpu_id;
+				cpu_rankings[j].ranking = cpu_rankings[j + 1].ranking;
+				cpu_rankings[j + 1].cpu_id = temp_id;
+				cpu_rankings[j + 1].ranking = temp_rank;
+			}
+			// If rankings are equal, sort by CPU ID (ascending)
+			else if (cpu_rankings[j].ranking == cpu_rankings[j + 1].ranking &&
+					 cpu_rankings[j].cpu_id > cpu_rankings[j + 1].cpu_id) {
+				// Swap
+				unsigned short temp_id = cpu_rankings[j].cpu_id;
+				unsigned char temp_rank = cpu_rankings[j].ranking;
+				cpu_rankings[j].cpu_id = cpu_rankings[j + 1].cpu_id;
+				cpu_rankings[j].ranking = cpu_rankings[j + 1].ranking;
+				cpu_rankings[j + 1].cpu_id = temp_id;
+				cpu_rankings[j + 1].ranking = temp_rank;
+			}
+		}
+	}
+	
+	// Populate the cpu_ordering array with the sorted CPU IDs
+	for (int i = 0; i < valid_cpus; i++) {
+		state->cpu_ordering[i] = cpu_rankings[i].cpu_id;
+	}
+	
 	return true;
 }
 
@@ -137,10 +187,16 @@ void _pc_print_prefcore_state(const prefcore_state *state)
 	printf("buffer: %s\n", state->buffer);
 
 	printf("prefcore_ranking:\n");
-	for (int i = 0; i < MAX_CPUS; i++) {
-		if (state->prefcore_ranking[i] == -1)
-			return;
+	for (unsigned short i = 0; i < MAX_CPUS; i++) {
+		if (state->prefcore_ranking[i] == 255)
+			break;
 		printf("CPU %d: Rank %d\n", i, state->prefcore_ranking[i]);
+	}
+	printf("cpu_ordering:\n");
+	for (unsigned short i = 0; i < MAX_CPUS; i++) {
+		if (state->cpu_ordering[i] == 255)
+			break;
+		printf("Core Order %d\n", state->cpu_ordering[i]);
 	}
 }
 
@@ -148,8 +204,8 @@ void _pc_print_prefcore_state(const prefcore_state *state)
 
 // Structure to hold child PIDs for each parent PID
 typedef struct {
-    pid_t children[MAX_CHILDREN_PER_PID];  // Fixed-size array of child PIDs
-    int count;                              // Number of children
+    unsigned short children[MAX_CHILDREN_PER_PID];  // Fixed-size array of child PIDs
+    unsigned short count;                              // Number of children
 } pid_children_t;
 
 // Global array to store children for each PID
@@ -161,7 +217,7 @@ void _pg_init_pidgraph(void) {
 }
 
 // Add a child PID to a parent PID
-void _pg_add_child(pid_t ppid, pid_t child) {
+void _pg_add_child(unsigned short ppid, unsigned short child) {
     // Check if we have room for another child
     if (ppid < MAX_PIDS && child < MAX_PIDS && 
         pid_children[ppid].count < MAX_CHILDREN_PER_PID) {
@@ -197,7 +253,7 @@ bool get_pidgraph(void) {
         if (!_pg_is_numeric(entry->d_name))
             continue;
 
-        pid_t pid = atoi(entry->d_name);
+        unsigned short pid = atoi(entry->d_name);
         if (pid >= MAX_PIDS)
             continue;
 
@@ -208,10 +264,10 @@ bool get_pidgraph(void) {
             continue;
 
         // Find the parent PID
-        pid_t ppid = 0;
+        unsigned short ppid = 0;
         while (fgets(line, sizeof(line), file)) {
             if (!strncmp(line, "PPid:", 5)) {
-                sscanf(line + 5, "%d", &ppid);
+                sscanf(line + 5, "%hd", &ppid);
                 break;
             }
         }
@@ -228,14 +284,14 @@ bool get_pidgraph(void) {
 }
 
 // Get all descendants of a PID
-void _pg_get_descendants(pid_t parent, pid_t *pid_arr, int *index) {
+void _pg_get_descendants(unsigned short parent, unsigned short *pid_arr, unsigned short *index) {
     // Check if the parent PID is valid
     if (parent >= MAX_PIDS)
         return;
     
     // Add all direct children to the result array
-    for (int i = 0; i < pid_children[parent].count; i++) {
-        pid_t child = pid_children[parent].children[i];
+    for (unsigned short i = 0; i < pid_children[parent].count; i++) {
+        unsigned short child = pid_children[parent].children[i];
         pid_arr[(*index)++] = child;
         
         // Recursively get descendants of this child
@@ -244,9 +300,9 @@ void _pg_get_descendants(pid_t parent, pid_t *pid_arr, int *index) {
 }
 
 // Print all descendants of a PID
-void _pg_print_children(pid_t parent) {
-    pid_t pid_arr[MAX_PIDS] = { 0 };
-    int index = 0;
+void _pg_print_children(unsigned short parent) {
+    unsigned short pid_arr[MAX_PIDS] = { 0 };
+    unsigned short index = 0;
     
     _pg_get_descendants(parent, pid_arr, &index);
     

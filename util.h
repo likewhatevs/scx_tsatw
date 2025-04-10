@@ -46,6 +46,7 @@ unsigned long long get_usec_now(void);
 #include <stdbool.h>
 
 // prefcore
+// prefcore means !nosmt atm.
 
 #define POLICY_PATH "/sys/devices/system/cpu/cpufreq/"
 // rly 32 till gaming threadripper handhelds lol.
@@ -56,10 +57,15 @@ typedef struct prefcore_state {
 	struct dirent *entry;
 	char filepath[512];
 	char buffer[4096];
-	int prefcore_ranking[MAX_CPUS];
+	unsigned char prefcore_ranking[MAX_CPUS];
+	unsigned char cpu_ordering[MAX_CPUS];
 } prefcore_state;
 
 bool prefcore_ranking(prefcore_state *state);
+
+// Returns an array of CPU IDs sorted by prefcore ranking (descending)
+// If rankings are equal, CPUs are sorted by ID (ascending)
+unsigned short* _pc_cpu_ordering(prefcore_state *state);
 
 void _pc_print_prefcore_state(const prefcore_state *state);
 
@@ -73,9 +79,10 @@ void _pc_print_prefcore_state(const prefcore_state *state);
 // ❯ cat /proc/sys/kernel/pid_max
 // 4194304
 // but honesly I'd just kernel.pid_max in grub.
-// looking at a few boxes might cut this to 4k.
-#define MAX_PIDS 8192
-#define MAX_CHILDREN_PER_PID 32
+// This probably needs to be 4k, but lets do 2k till it fails.
+// moar fps moar better.
+#define MAX_PIDS 2048
+#define MAX_CHILDREN_PER_PID 2048
 
 // Function declarations for pidgraph
 int _pg_is_numeric(const char *str);
@@ -84,16 +91,16 @@ int _pg_is_numeric(const char *str);
 void _pg_init_pidgraph(void);
 
 // Add a child PID to a parent PID
-void _pg_add_child(pid_t ppid, pid_t child);
+void _pg_add_child(unsigned short ppid, unsigned short child);
 
 // Build the process hierarchy
 bool get_pidgraph(void);
 
 // Print all descendants of a PID
-void _pg_print_children(pid_t parent);
+void _pg_print_children(unsigned short parent);
 
 // Reset the pidgraph data structure
 void _pg_reset_pidgraph(void);
 
 // Get all descendants of a PID
-void _pg_get_descendants(pid_t parent, pid_t *pid_arr, int *index);
+void _pg_get_descendants(unsigned short parent, unsigned short *pid_arr, unsigned short *index);
