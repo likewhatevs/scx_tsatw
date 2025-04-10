@@ -38,7 +38,8 @@ void _ma_pretty_print_msg(mangoapp_msg_v1 *buf);
 
 bool update_framedata_poll_usec(mangoapp_msg_v1 *buf,
 				unsigned long long poll_try_window,
-				unsigned long long poll_interval);
+				unsigned long long poll_interval,
+				unsigned long long pc_checks);
 
 unsigned long long get_usec_now(void);
 
@@ -81,8 +82,8 @@ void _pc_print_prefcore_state(const prefcore_state *state);
 // but honesly I'd just kernel.pid_max in grub.
 // This probably needs to be 4k, but lets do 2k till it fails.
 // moar fps moar better.
-#define MAX_PIDS 2048
-#define MAX_CHILDREN_PER_PID 2048
+#define MAX_PIDS 4096
+#define MAX_CHILDREN_PER_PID 4096
 
 // Function declarations for pidgraph
 int _pg_is_numeric(const char *str);

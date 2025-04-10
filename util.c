@@ -58,33 +58,24 @@ int _ma_try_read(mangoapp_msg_v1 *buf, int msgid)
 
 bool update_framedata_poll_usec(mangoapp_msg_v1 *buf,
 				unsigned long long poll_try_window,
-				unsigned long long poll_interval)
+				unsigned long long poll_interval,
+				unsigned long long pc_checks)
 {
 	int key = ftok("mangoapp", 65);
 	int msgid = msgget(key, 0 /*get key*/);
 	int len = _ma_try_read(buf, msgid);
 
-	if (poll_try_window == 0) {
-		do {
-			if (len > 0)
-				return true;
-			usleep(poll_interval);
-			len = _ma_try_read(buf, msgid);
-		} while (!(len > 0));
-
-		if (len > 0)
-			return true;
-
-		return false;
-	}
-
 	unsigned long long start = get_usec_now();
-
+	unsigned long long pc_c = 0;
 	do {
 		if (len > 0)
 			return true;
-		usleep(poll_interval);
+		if (pc_c >= pc_checks) {
+			usleep(poll_interval);
+			pc_c = 0;
+		}
 		len = _ma_try_read(buf, msgid);
+		pc_c++;
 	} while (!(len > 0) && get_usec_now() - start < poll_try_window);
 
 	if (len > 0)

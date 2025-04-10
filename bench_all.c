@@ -28,10 +28,11 @@ UBENCH_EX(mangoapp, try_get_game_metadata)
 	mangoapp_msg_v1 buf = { 0 };
 	memset(&buf, 0, sizeof(buf));
 	unsigned long long poll_interval = 1; /* wait a us between checks*/
-	unsigned long long poll_window = 0; /* ignore poll window */
+	unsigned long long poll_window = 500000; /* ignore poll window */
+	unsigned long long pc_checks = 100; /* check x iterations before sleeping */
 	UBENCH_DO_BENCHMARK()
 	{
-		update_framedata_poll_usec(&buf, poll_window, poll_interval);
+		update_framedata_poll_usec(&buf, poll_window, poll_interval, pc_checks);
 	}
 }
 
@@ -40,13 +41,14 @@ UBENCH_EX(mangoapp, get_game_metadata)
 	mangoapp_msg_v1 buf = { 0 };
 	memset(&buf, 0, sizeof(buf));
 	unsigned long long poll_interval = 1; /* wait a us between checks*/
-	unsigned long long poll_window = 0; /* ignore poll window */
+	unsigned long long poll_window = 500000; /* ignore poll window */
+	unsigned long long pc_checks = 100; /* check x iterations before sleeping */
 	int len = 0;
 	UBENCH_DO_BENCHMARK()
 	{
 		do {
 			len = update_framedata_poll_usec(&buf, poll_window,
-							 poll_interval);
+							 poll_interval, pc_checks);
 		} while (!(len > 0));
 	}
 }
