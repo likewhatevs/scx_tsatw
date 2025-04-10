@@ -63,7 +63,6 @@ s32 BPF_STRUCT_OPS(tsatw_select_cpu, struct task_struct *p, s32 prev_cpu,
 {
 	bool is_idle = false;
 	s32 cpu;
-
 	cpu = scx_bpf_select_cpu_dfl(p, prev_cpu, wake_flags, &is_idle);
 	if (is_idle) {
 		stat_inc(0); /* count local queueing */
