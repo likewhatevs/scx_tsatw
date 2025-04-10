@@ -75,20 +75,25 @@ void _pc_print_prefcore_state(const prefcore_state *state);
 // but honesly I'd just kernel.pid_max in grub.
 // looking at a few boxes might cut this to 4k.
 #define MAX_PIDS 8192
+#define MAX_CHILDREN_PER_PID 32
 
-typedef struct pid_node {
-	pid_t pid;
-	struct pid_node *next;
-} pid_node;
-
+// Function declarations for pidgraph
 int _pg_is_numeric(const char *str);
 
-void _pg_add_child(pid_t ppid, pid_t child, pid_node **children);
+// Initialize the pidgraph data structure
+void _pg_init_pidgraph(void);
 
-bool get_pidgraph(pid_node **pidgraph);
+// Add a child PID to a parent PID
+void _pg_add_child(pid_t ppid, pid_t child);
 
-void _pg_print_children(pid_t parent, pid_node **children);
+// Build the process hierarchy
+bool get_pidgraph(void);
 
-bool _pg_pid_arr(pid_t parent, pid_node **children, int *pid_arr, int *index);
+// Print all descendants of a PID
+void _pg_print_children(pid_t parent);
 
-void _pg_reset_free(pid_node **children);
+// Reset the pidgraph data structure
+void _pg_reset_pidgraph(void);
+
+// Get all descendants of a PID
+void _pg_get_descendants(pid_t parent, pid_t *pid_arr, int *index);

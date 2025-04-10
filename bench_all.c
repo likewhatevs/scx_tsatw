@@ -3,15 +3,14 @@
 
 UBENCH_EX(pidgraph, get_root_pid_vec)
 {
-	pid_node **pidgraph = calloc(MAX_PIDS, sizeof(pid_node *));
-	int pid_arr[MAX_PIDS] = { 0 };
+	pid_t pid_arr[MAX_PIDS] = { 0 };
 
 	UBENCH_DO_BENCHMARK()
 	{
 		int idx = 0;
-		get_pidgraph(pidgraph);
-		_pg_pid_arr(1, pidgraph, pid_arr, &idx);
-		_pg_reset_free(pidgraph);
+		get_pidgraph();
+		_pg_get_descendants(1, pid_arr, &idx);
+		_pg_reset_pidgraph();
 	}
 }
 

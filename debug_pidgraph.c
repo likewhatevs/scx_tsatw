@@ -4,10 +4,12 @@
 
 int main()
 {
-	pid_node **pidgraph = calloc(MAX_PIDS, sizeof(pid_node *));
-	if (get_pidgraph(pidgraph)) {
-		_pg_print_children(1, pidgraph);
+	if (get_pidgraph()) {
+		_pg_print_children(1);
 	} else {
 		printf("error getting pidgraph");
 	}
+	
+	_pg_reset_pidgraph();
+	return 0;
 }

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include "util.h"
 //mangoapp stuff
 #include <sys/types.h>
@@ -145,107 +146,120 @@ void _pc_print_prefcore_state(const prefcore_state *state)
 
 // pidgraph
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
+// Structure to hold child PIDs for each parent PID
+typedef struct {
+    pid_t children[MAX_CHILDREN_PER_PID];  // Fixed-size array of child PIDs
+    int count;                              // Number of children
+} pid_children_t;
 
-int _pg_is_numeric(const char *str)
-{
-	for (; *str; ++str)
-		if (!isdigit(*str))
-			return 0;
-	return 1;
+// Global array to store children for each PID
+static pid_children_t pid_children[MAX_PIDS];
+
+// Initialize the pidgraph data structure
+void _pg_init_pidgraph(void) {
+    memset(pid_children, 0, sizeof(pid_children));
 }
 
-void _pg_add_child(pid_t ppid, pid_t child, pid_node **children)
-{
-	pid_node *node = malloc(sizeof(pid_node));
-	node->pid = child;
-	node->next = children[ppid];
-	children[ppid] = node;
+// Add a child PID to a parent PID
+void _pg_add_child(pid_t ppid, pid_t child) {
+    // Check if we have room for another child
+    if (ppid < MAX_PIDS && child < MAX_PIDS && 
+        pid_children[ppid].count < MAX_CHILDREN_PER_PID) {
+        pid_children[ppid].children[pid_children[ppid].count++] = child;
+    }
 }
 
-bool get_pidgraph(pid_node **children)
-{
-	DIR *proc = opendir(PROC_DIR);
-	if (!proc) {
-		perror("opendir");
-		return false;
-	}
-
-	struct dirent *entry;
-	char path[256], line[256];
-	FILE *file;
-	while ((entry = readdir(proc))) {
-		if (!_pg_is_numeric(entry->d_name))
-			continue;
-
-		pid_t pid = atoi(entry->d_name);
-
-		snprintf(path, sizeof(path), PROC_DIR "/%d/" STATUS_FILE, pid);
-		file = fopen(path, "r");
-		if (!file)
-			continue;
-
-		pid_t ppid = -1;
-		while (fgets(line, sizeof(line), file)) {
-			if (!strncmp(line, "PPid:", 5)) {
-				sscanf(line + 5, "%d", &ppid);
-				break;
-			}
-		}
-		fclose(file);
-
-		if (ppid >= 0 && ppid < MAX_PIDS)
-			_pg_add_child(ppid, pid, children);
-	}
-	closedir(proc);
-	return true;
+// Check if a string is numeric
+int _pg_is_numeric(const char *str) {
+    for (; *str; ++str)
+        if (!isdigit(*str))
+            return 0;
+    return 1;
 }
 
-bool _pg_pid_arr(pid_t parent, pid_node **children, int *pid_arr, int *index)
-{
-	pid_node *n = children[parent];
-	if (!n)
-		return false;
+// Build the process hierarchy
+bool get_pidgraph(void) {
+    // Initialize the data structure
+    _pg_init_pidgraph();
+    
+    DIR *proc = opendir(PROC_DIR);
+    if (!proc) {
+        perror("opendir");
+        return false;
+    }
 
-	while (n) {
-		pid_arr[(*index)++] = n->pid;
-		// Recursive call to add grandchildren (and deeper levels)
-		_pg_pid_arr(n->pid, children, pid_arr, index);
-		n = n->next;
-	}
-	return true;
+    struct dirent *entry;
+    char path[256], line[256];
+    FILE *file;
+    
+    // Scan all processes in /proc
+    while ((entry = readdir(proc))) {
+        if (!_pg_is_numeric(entry->d_name))
+            continue;
+
+        pid_t pid = atoi(entry->d_name);
+        if (pid >= MAX_PIDS)
+            continue;
+
+        // Read the process status file
+        snprintf(path, sizeof(path), PROC_DIR "/%d/" STATUS_FILE, pid);
+        file = fopen(path, "r");
+        if (!file)
+            continue;
+
+        // Find the parent PID
+        pid_t ppid = 0;
+        while (fgets(line, sizeof(line), file)) {
+            if (!strncmp(line, "PPid:", 5)) {
+                sscanf(line + 5, "%d", &ppid);
+                break;
+            }
+        }
+        fclose(file);
+
+        // Add the parent-child relationship
+        if (ppid > 0 && ppid < MAX_PIDS) {
+            _pg_add_child(ppid, pid);
+        }
+    }
+    
+    closedir(proc);
+    return true;
 }
 
-void _pg_print_children(pid_t parent, pid_node **children)
-{
-	int pid_arr[MAX_PIDS] = { 0 };
-	int index = 0;
-
-	if (_pg_pid_arr(parent, children, pid_arr, &index)) {
-		for (int i = 0; i < MAX_PIDS; i++) {
-			if (pid_arr[i] == 0)
-				break;
-			printf("%d\n", pid_arr[i]);
-		}
-	} else {
-		printf("failed to obtain pid children");
-	}
+// Get all descendants of a PID
+void _pg_get_descendants(pid_t parent, pid_t *pid_arr, int *index) {
+    // Check if the parent PID is valid
+    if (parent >= MAX_PIDS)
+        return;
+    
+    // Add all direct children to the result array
+    for (int i = 0; i < pid_children[parent].count; i++) {
+        pid_t child = pid_children[parent].children[i];
+        pid_arr[(*index)++] = child;
+        
+        // Recursively get descendants of this child
+        _pg_get_descendants(child, pid_arr, index);
+    }
 }
 
-void _pg_reset_free(pid_node **children)
-{
-	// this is kinda garbage
-	// fix it later.
-	for (int i = 0; i < MAX_PIDS; i++) {
-		pid_node *node = children[i];
-		while (node) {
-			pid_node *tmp = node;
-			node = node->next;
-			free(tmp);
-		}
-	}
-	memset(children, 0, MAX_PIDS * sizeof(pid_node *));
+// Print all descendants of a PID
+void _pg_print_children(pid_t parent) {
+    pid_t pid_arr[MAX_PIDS] = { 0 };
+    int index = 0;
+    
+    _pg_get_descendants(parent, pid_arr, &index);
+    
+    if (index > 0) {
+        for (int i = 0; i < index; i++) {
+            printf("%d\n", pid_arr[i]);
+        }
+    } else {
+        printf("No children found for PID %d\n", parent);
+    }
+}
+
+// Reset the pidgraph data structure
+void _pg_reset_pidgraph(void) {
+    _pg_init_pidgraph();
 }
