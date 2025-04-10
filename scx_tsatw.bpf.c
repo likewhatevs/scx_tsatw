@@ -48,7 +48,7 @@ struct {
 } stats SEC(".maps");
 
 // write care pids to maps local to all cpus.
-// 
+//
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	// key is pid
@@ -71,7 +71,6 @@ struct {
 	__uint(map_flags, 0);
 } frametime SEC(".maps");
 
-
 static void stat_inc(u32 idx)
 {
 	u64 *cnt_p = bpf_map_lookup_elem(&stats, &idx);
@@ -87,13 +86,13 @@ s32 BPF_STRUCT_OPS(tsatw_select_cpu, struct task_struct *p, s32 prev_cpu,
 	s32 cpu;
 	u32 tgid = p->tgid;
 
-	
 	if (bpf_map_lookup_elem(&care_pids, &tgid)) {
-		if(care_cpumask)
+		if (care_cpumask)
 			cpu = scx_bpf_pick_any_cpu(cast_mask(care_cpumask), 0);
 	} else {
-		if(no_care_cpumask)
-			cpu = scx_bpf_pick_any_cpu(cast_mask(no_care_cpumask), 0);
+		if (no_care_cpumask)
+			cpu = scx_bpf_pick_any_cpu(cast_mask(no_care_cpumask),
+						   0);
 	}
 
 	return cpu;
@@ -103,7 +102,7 @@ void BPF_STRUCT_OPS(tsatw_enqueue, struct task_struct *p, u64 enq_flags)
 {
 	stat_inc(1); /* count global queueing */
 
-	u64* frametime_avg;
+	u64 *frametime_avg;
 	u64 frametime_frac = 0;
 	u64 z_ptr = 0;
 
@@ -114,7 +113,7 @@ void BPF_STRUCT_OPS(tsatw_enqueue, struct task_struct *p, u64 enq_flags)
 	}
 
 	// need to use systing to get a sense of a decent fraction.
-	frametime_frac = (*frametime_avg)/5;
+	frametime_frac = (*frametime_avg) / 5;
 
 	u64 vtime = p->scx.dsq_vtime;
 
@@ -129,26 +128,25 @@ void BPF_STRUCT_OPS(tsatw_enqueue, struct task_struct *p, u64 enq_flags)
 
 	if (bpf_map_lookup_elem(&care_pids, &tgid)) {
 		scx_bpf_dsq_insert_vtime(p, CARE_DSQ, frametime_frac, vtime,
-						enq_flags);
+					 enq_flags);
 	} else {
 		scx_bpf_dsq_insert_vtime(p, NO_CARE_DSQ, frametime_frac, vtime,
-						enq_flags);
+					 enq_flags);
 	}
-
 }
 
 void BPF_STRUCT_OPS(tsatw_dispatch, s32 cpu, struct task_struct *prev)
 {
 	// should be idk not this lol.
-	for(int i = 0; i < 16; i++) {
-		if (i < 8){
+	for (int i = 0; i < 16; i++) {
+		if (i < 8) {
 			if (cpu == care_cpus[i]) {
 				scx_bpf_dsq_move_to_local(CARE_DSQ);
 			}
-		} 
+		}
 		if (cpu == no_care_cpus[i]) {
 			scx_bpf_dsq_move_to_local(NO_CARE_DSQ);
-		}		
+		}
 	}
 }
 
@@ -181,7 +179,7 @@ void BPF_STRUCT_OPS(tsatw_stopping, struct task_struct *p, bool runnable)
 	 * instead of depending on @p->scx.slice.
 	 */
 
-	u64* frametime_avg;
+	u64 *frametime_avg;
 	u64 frametime_frac = 0;
 	u64 z_ptr = 0;
 
@@ -190,7 +188,6 @@ void BPF_STRUCT_OPS(tsatw_stopping, struct task_struct *p, bool runnable)
 		scx_bpf_error("frametime lookup failed");
 		return;
 	}
-
 
 	p->scx.dsq_vtime +=
 		(frametime_frac - p->scx.slice) * 100 / p->scx.weight;
@@ -213,7 +210,7 @@ s32 BPF_STRUCT_OPS_SLEEPABLE(tsatw_init)
 	s32 i;
 
 	tmp_care_cpumask = bpf_cpumask_create();
-	if (!tmp_care_cpumask){
+	if (!tmp_care_cpumask) {
 		return -ENOMEM;
 	}
 	tmp_no_care_cpumask = bpf_cpumask_create();
@@ -229,26 +226,28 @@ s32 BPF_STRUCT_OPS_SLEEPABLE(tsatw_init)
 	// }
 
 	// won't work with prefcore/power modes rly.
-	bpf_for(i, 0, 4){
+	bpf_for(i, 0, 4)
+	{
 		bpf_cpumask_set_cpu(i, tmp_care_cpumask);
-		bpf_cpumask_set_cpu(i+12, tmp_care_cpumask);
+		bpf_cpumask_set_cpu(i + 12, tmp_care_cpumask);
 	}
-	bpf_for(i, 4, 12){
+	bpf_for(i, 4, 12)
+	{
 		bpf_cpumask_set_cpu(i, tmp_no_care_cpumask);
-		bpf_cpumask_set_cpu(i+12, tmp_no_care_cpumask);
+		bpf_cpumask_set_cpu(i + 12, tmp_no_care_cpumask);
 	}
 
 	tmp_care_cpumask = bpf_kptr_xchg(&care_cpumask, tmp_care_cpumask);
-	if (tmp_care_cpumask){
+	if (tmp_care_cpumask) {
 		bpf_cpumask_release(tmp_care_cpumask);
 	}
 
-
-	tmp_no_care_cpumask = bpf_kptr_xchg(&no_care_cpumask, tmp_no_care_cpumask);
-	if (tmp_no_care_cpumask){
+	tmp_no_care_cpumask =
+		bpf_kptr_xchg(&no_care_cpumask, tmp_no_care_cpumask);
+	if (tmp_no_care_cpumask) {
 		bpf_cpumask_release(tmp_no_care_cpumask);
 	}
-	
+
 	scx_bpf_create_dsq(CARE_DSQ, -1);
 	scx_bpf_create_dsq(NO_CARE_DSQ, -1);
 

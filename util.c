@@ -119,55 +119,65 @@ bool prefcore_ranking(prefcore_state *state)
 		}
 	}
 	closedir(state->dir);
-	
+
 	// Create a temporary array to store CPU IDs and their rankings
 	struct {
 		unsigned short cpu_id;
 		unsigned char ranking;
 	} cpu_rankings[MAX_CPUS];
-	
+
 	// Initialize the array with CPU IDs and their rankings
 	int valid_cpus = 0;
 	for (int i = 0; i < MAX_CPUS; i++) {
 		if (state->prefcore_ranking[i] != 255) {
 			cpu_rankings[valid_cpus].cpu_id = i;
-			cpu_rankings[valid_cpus].ranking = state->prefcore_ranking[i];
+			cpu_rankings[valid_cpus].ranking =
+				state->prefcore_ranking[i];
 			valid_cpus++;
 		}
 	}
-	
+
 	// Sort the array by ranking (descending), then by CPU ID (ascending)
 	for (int i = 0; i < valid_cpus - 1; i++) {
 		for (int j = 0; j < valid_cpus - i - 1; j++) {
 			// First sort by ranking (descending)
-			if (cpu_rankings[j].ranking < cpu_rankings[j + 1].ranking) {
+			if (cpu_rankings[j].ranking <
+			    cpu_rankings[j + 1].ranking) {
 				// Swap
 				unsigned short temp_id = cpu_rankings[j].cpu_id;
-				unsigned char temp_rank = cpu_rankings[j].ranking;
-				cpu_rankings[j].cpu_id = cpu_rankings[j + 1].cpu_id;
-				cpu_rankings[j].ranking = cpu_rankings[j + 1].ranking;
+				unsigned char temp_rank =
+					cpu_rankings[j].ranking;
+				cpu_rankings[j].cpu_id =
+					cpu_rankings[j + 1].cpu_id;
+				cpu_rankings[j].ranking =
+					cpu_rankings[j + 1].ranking;
 				cpu_rankings[j + 1].cpu_id = temp_id;
 				cpu_rankings[j + 1].ranking = temp_rank;
 			}
 			// If rankings are equal, sort by CPU ID (ascending)
-			else if (cpu_rankings[j].ranking == cpu_rankings[j + 1].ranking &&
-					 cpu_rankings[j].cpu_id > cpu_rankings[j + 1].cpu_id) {
+			else if (cpu_rankings[j].ranking ==
+					 cpu_rankings[j + 1].ranking &&
+				 cpu_rankings[j].cpu_id >
+					 cpu_rankings[j + 1].cpu_id) {
 				// Swap
 				unsigned short temp_id = cpu_rankings[j].cpu_id;
-				unsigned char temp_rank = cpu_rankings[j].ranking;
-				cpu_rankings[j].cpu_id = cpu_rankings[j + 1].cpu_id;
-				cpu_rankings[j].ranking = cpu_rankings[j + 1].ranking;
+				unsigned char temp_rank =
+					cpu_rankings[j].ranking;
+				cpu_rankings[j].cpu_id =
+					cpu_rankings[j + 1].cpu_id;
+				cpu_rankings[j].ranking =
+					cpu_rankings[j + 1].ranking;
 				cpu_rankings[j + 1].cpu_id = temp_id;
 				cpu_rankings[j + 1].ranking = temp_rank;
 			}
 		}
 	}
-	
+
 	// Populate the cpu_ordering array with the sorted CPU IDs
 	for (int i = 0; i < valid_cpus; i++) {
 		state->cpu_ordering[i] = cpu_rankings[i].cpu_id;
 	}
-	
+
 	return true;
 }
 
@@ -195,118 +205,127 @@ void _pc_print_prefcore_state(const prefcore_state *state)
 
 // Structure to hold child PIDs for each parent PID
 typedef struct {
-    unsigned short children[MAX_CHILDREN_PER_PID];  // Fixed-size array of child PIDs
-    unsigned short count;                              // Number of children
+	unsigned short
+		children[MAX_CHILDREN_PER_PID]; // Fixed-size array of child PIDs
+	unsigned short count; // Number of children
 } pid_children_t;
 
 // Global array to store children for each PID
 static pid_children_t pid_children[MAX_PIDS];
 
 // Initialize the pidgraph data structure
-void _pg_init_pidgraph(void) {
-    memset(pid_children, 0, sizeof(pid_children));
+void _pg_init_pidgraph(void)
+{
+	memset(pid_children, 0, sizeof(pid_children));
 }
 
 // Add a child PID to a parent PID
-void _pg_add_child(unsigned short ppid, unsigned short child) {
-    // Check if we have room for another child
-    if (ppid < MAX_PIDS && child < MAX_PIDS && 
-        pid_children[ppid].count < MAX_CHILDREN_PER_PID) {
-        pid_children[ppid].children[pid_children[ppid].count++] = child;
-    }
+void _pg_add_child(unsigned short ppid, unsigned short child)
+{
+	// Check if we have room for another child
+	if (ppid < MAX_PIDS && child < MAX_PIDS &&
+	    pid_children[ppid].count < MAX_CHILDREN_PER_PID) {
+		pid_children[ppid].children[pid_children[ppid].count++] = child;
+	}
 }
 
 // Check if a string is numeric
-int _pg_is_numeric(const char *str) {
-    for (; *str; ++str)
-        if (!isdigit(*str))
-            return 0;
-    return 1;
+int _pg_is_numeric(const char *str)
+{
+	for (; *str; ++str)
+		if (!isdigit(*str))
+			return 0;
+	return 1;
 }
 
 // Build the process hierarchy
-bool get_pidgraph(void) {
-    // Initialize the data structure
-    _pg_init_pidgraph();
-    
-    DIR *proc = opendir(PROC_DIR);
-    if (!proc) {
-        perror("opendir");
-        return false;
-    }
+bool get_pidgraph(void)
+{
+	// Initialize the data structure
+	_pg_init_pidgraph();
 
-    struct dirent *entry;
-    char path[256], line[256];
-    FILE *file;
-    
-    // Scan all processes in /proc
-    while ((entry = readdir(proc))) {
-        if (!_pg_is_numeric(entry->d_name))
-            continue;
+	DIR *proc = opendir(PROC_DIR);
+	if (!proc) {
+		perror("opendir");
+		return false;
+	}
 
-        unsigned short pid = atoi(entry->d_name);
-        if (pid >= MAX_PIDS)
-            continue;
+	struct dirent *entry;
+	char path[256], line[256];
+	FILE *file;
 
-        // Read the process status file
-        snprintf(path, sizeof(path), PROC_DIR "/%d/" STATUS_FILE, pid);
-        file = fopen(path, "r");
-        if (!file)
-            continue;
+	// Scan all processes in /proc
+	while ((entry = readdir(proc))) {
+		if (!_pg_is_numeric(entry->d_name))
+			continue;
 
-        // Find the parent PID
-        unsigned short ppid = 0;
-        while (fgets(line, sizeof(line), file)) {
-            if (!strncmp(line, "PPid:", 5)) {
-                sscanf(line + 5, "%hd", &ppid);
-                break;
-            }
-        }
-        fclose(file);
+		unsigned short pid = atoi(entry->d_name);
+		if (pid >= MAX_PIDS)
+			continue;
 
-        // Add the parent-child relationship
-        if (ppid > 0 && ppid < MAX_PIDS) {
-            _pg_add_child(ppid, pid);
-        }
-    }
-    
-    closedir(proc);
-    return true;
+		// Read the process status file
+		snprintf(path, sizeof(path), PROC_DIR "/%d/" STATUS_FILE, pid);
+		file = fopen(path, "r");
+		if (!file)
+			continue;
+
+		// Find the parent PID
+		unsigned short ppid = 0;
+		while (fgets(line, sizeof(line), file)) {
+			if (!strncmp(line, "PPid:", 5)) {
+				sscanf(line + 5, "%hd", &ppid);
+				break;
+			}
+		}
+		fclose(file);
+
+		// Add the parent-child relationship
+		if (ppid > 0 && ppid < MAX_PIDS) {
+			_pg_add_child(ppid, pid);
+		}
+	}
+
+	closedir(proc);
+	return true;
 }
 
 // Get all descendants of a PID
-void _pg_get_descendants(unsigned short parent, unsigned short *pid_arr, unsigned short *index) {
-    // Check if the parent PID is valid
-    if (parent >= MAX_PIDS)
-        return;
-    
-    // Add all direct children to the result array
-    for (unsigned short i = 0; i < pid_children[parent].count; i++) {
-        unsigned short child = pid_children[parent].children[i];
-        pid_arr[(*index)++] = child;
-        
-        // Recursively get descendants of this child
-        _pg_get_descendants(child, pid_arr, index);
-    }
+void _pg_get_descendants(unsigned short parent, unsigned short *pid_arr,
+			 unsigned short *index)
+{
+	// Check if the parent PID is valid
+	if (parent >= MAX_PIDS)
+		return;
+
+	// Add all direct children to the result array
+	for (unsigned short i = 0; i < pid_children[parent].count; i++) {
+		unsigned short child = pid_children[parent].children[i];
+		pid_arr[(*index)++] = child;
+
+		// Recursively get descendants of this child
+		_pg_get_descendants(child, pid_arr, index);
+	}
 }
 
 // Print all descendants of a PID
-void _pg_print_children(unsigned short parent) {
-    unsigned short pid_arr[MAX_PIDS] = { 0 };
-    unsigned short index = 0;
-    
-    _pg_get_descendants(parent, pid_arr, &index);
-    
-    if (index > 0) {
-        for (int i = 0; i < index; i++) {
-            printf("%d\n", pid_arr[i]);
-        }
-    } else {
-        printf("No children found for PID %d\n", parent);
-    }
+void _pg_print_children(unsigned short parent)
+{
+	unsigned short pid_arr[MAX_PIDS] = { 0 };
+	unsigned short index = 0;
+
+	_pg_get_descendants(parent, pid_arr, &index);
+
+	if (index > 0) {
+		for (int i = 0; i < index; i++) {
+			printf("%d\n", pid_arr[i]);
+		}
+	} else {
+		printf("No children found for PID %d\n", parent);
+	}
 }
 
 // Reset the pidgraph data structure
-void _pg_reset_pidgraph(void) {
-    _pg_init_pidgraph();
+void _pg_reset_pidgraph(void)
+{
+	_pg_init_pidgraph();
 }

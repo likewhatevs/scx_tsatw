@@ -9,7 +9,7 @@ int main()
 	} else {
 		printf("error getting pidgraph");
 	}
-	
+
 	_pg_reset_pidgraph();
 	return 0;
 }

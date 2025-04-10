@@ -66,7 +66,7 @@ bool prefcore_ranking(prefcore_state *state);
 
 // Returns an array of CPU IDs sorted by prefcore ranking (descending)
 // If rankings are equal, CPUs are sorted by ID (ascending)
-unsigned short* _pc_cpu_ordering(prefcore_state *state);
+unsigned short *_pc_cpu_ordering(prefcore_state *state);
 
 void _pc_print_prefcore_state(const prefcore_state *state);
 
@@ -104,4 +104,5 @@ void _pg_print_children(unsigned short parent);
 void _pg_reset_pidgraph(void);
 
 // Get all descendants of a PID
-void _pg_get_descendants(unsigned short parent, unsigned short *pid_arr, unsigned short *index);
+void _pg_get_descendants(unsigned short parent, unsigned short *pid_arr,
+			 unsigned short *index);
